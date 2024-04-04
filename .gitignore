@@ -1,0 +1,6 @@
+# Python Virtual Environment
+.venv
+# cache
+__pycache__
+# logs
+logs
