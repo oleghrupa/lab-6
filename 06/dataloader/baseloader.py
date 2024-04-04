@@ -1,6 +1,6 @@
 from datetime import datetime
 import requests
-import pandas as pd
+import pandas as pd 
 
 class BaseDataLoader:
 

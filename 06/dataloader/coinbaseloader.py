@@ -1,54 +1,41 @@
-import json
+import requests
 import pandas as pd
-from datetime import datetime
-from pandas.core.api import DataFrame as DataFrame
-from enum import Enum
 
-from .baseloader import BaseDataLoader
+# Отримати список доступних продуктів
+url = "https://api.pro.coinbase.com/products"
+response = requests.get(url)
+products = response.json()
 
-class Granularity(Enum):
-    ONE_MINUTE=60,
-    FIVE_MINUTES=300,
-    FIFTEEN_MINUTES=900,
-    ONE_HOUR=3600,
-    SIX_HOURS=21600,
-    ONE_DAY=86400
+# Перетворення в DataFrame
+df_products = pd.DataFrame(products)
+print(df_products)
+# Вибрати 3 продукти
+selected_products = df_products['id'].sample(3).tolist()
 
-class CoinbaseLoader(BaseDataLoader):
+# Функція для отримання історичних даних
+def get_historical_data(product_id, start_date, end_date, granularity):
+    url = f"https://api.pro.coinbase.com/products/{product_id}/candles"
+    params = {
+        'start': start_date,
+        'end': end_date,
+        'granularity': granularity
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    df = pd.DataFrame(data, columns=['timestamp', 'low', 'high', 'open', 'close', 'volume'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')  # Конвертація timestamp в datetime
+    df.set_index('timestamp', inplace=True)  # Встановлення timestamp як індекс
+    return df
 
-    def __init__(self, endpoint="https://api.exchange.coinbase.com"):
-        super().__init__(endpoint)
+# Отримання даних
+start_date = '2022-01-01T00:00:00'
+end_date = '2022-04-01T00:00:00'
+granularity = 86400  # день
 
-    def get_pairs(self) -> pd.DataFrame:
-        data = self._get_req("/products")
-        df = pd.DataFrame(json.loads(data))
-        df.set_index('id', drop=True, inplace=True)
-        return df
+dfs = {}
+for product in selected_products:
+    dfs[product] = get_historical_data(product, start_date, end_date, granularity)
 
-    def get_stats(self, pair: str) -> pd.DataFrame:
-        data = self._get_req(f"/products/{pair}")
-        return pd.DataFrame(json.loads(data), index=[0])
-
-    def get_historical_data(self, pair: str, begin: datetime, end: datetime, granularity: Granularity) -> DataFrame:
-        params = {
-            "start": begin,
-            "end": end,
-            "granularity": granularity.value
-        }
-        # retrieve needed data from Coinbase
-        data = self._get_req("/products/" + pair + "/candles", params)
-        # parse response and create DataFrame from it
-        df = pd.DataFrame(json.loads(data),
-                          columns=("timestamp", "low", "high", "open", "close", "volume"))
-        # use timestamp column as index
-        df.set_index('timestamp', drop=True, inplace=True)
-        return df
-
-if __name__ == "__main__":
-    loader = CoinbaseLoader()
-    data = loader.get_pairs()
-    print(data)
-    data = loader.get_stats("btc-usdt")
-    print(data)
-    data = loader.get_historical_data("btc-usdt", "2023-01-01", "2023-06-30", granularity=Granularity.ONE_DAY)
-    print(data.head(5))
+# Виведення DataFrame
+for product, df in dfs.items():
+    print(f"\n{product}:\n{df.head()}")
